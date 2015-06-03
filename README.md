@@ -21,3 +21,6 @@ The following shell commands are presumed to be in `$PATH`:
     tail
     tr
     xargs
+
+
+GPLv3 licensed
