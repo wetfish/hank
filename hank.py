@@ -167,6 +167,7 @@ def run_proc_cb(udata, command, rc, stdout, stderr):
             return weechat.WEECHAT_RC_OK
         if rci == 0:
             curl_stdout = curl_stdout.strip()
+            curl_stdout = ''.join([i if ord(i) < 128 else '?' for i in curl_stdout])
             if curl_stdout != "":
                 weechat.command(buffer, "/say " + (fmt % (curl_stdout)))
             else:
