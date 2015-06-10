@@ -3,7 +3,7 @@ import random
 import urllib
 import json
 
-weechat.register("hankbot", "ceph", "1.1", "GPL3", "hankbot", "", "")
+weechat.register("hankbot", "ceph", "1.2", "GPL3", "hankbot", "", "")
 
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, " \
     "like Gecko) Chrome/39.0.2171.95 Safari/537.36"
@@ -38,6 +38,8 @@ def msg_cb(data, signal, signal_data):
         run_im(srv, chn, rest, pre_q="site:tumblr.com ")
     elif tokn == "?rl" or random.randint(1, UNPROVOKED_ODDS) == 1:
         run_wf(srv, chn)
+    elif tokn == "?ly":
+        run_ly(srv, chn, rest)
     elif tokn == "?c":
         run_co(srv, chn, "C", rest)
     elif tokn == "?cpp":
@@ -67,6 +69,18 @@ def msg_cb(data, signal, signal_data):
         run_insult(srv, chn) if random.randint(1, INSULT_ODDS) == 1 \
         else run_compliment(srv, chn)
     return weechat.WEECHAT_RC_OK
+
+def run_ly(srv, chn, rest):
+    url = "http://genius.com/search?" + \
+        urllib.urlencode({ "q": rest })
+    run_curl(srv, chn, url, """grep -Po """
+        """'(?<=href=")http://genius.com/[^"]+(?=" class=" song_link")' | """ \
+        """head -n1 | xargs curl -s | lynx -stdin -dump | """ \
+        """ack -A1000 'Copy Embed' | tail -n+3 | """ \
+        """awk '/^\w/{s=1} {if (s==0) print $0}' | """ \
+        """sed -e 's/^\s\+//' | """ \
+        """sed 's/\[[0-9]\+\]//' | """ \
+        """ack -i -C1 """ + escapeshellarg(rest) + """ | head -n3""", "%s")
 
 def run_co(srv, chn, lang, code):
     url = "http://codepad.org"
