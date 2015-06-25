@@ -11,6 +11,7 @@ The following shell commands are presumed to be in `$PATH`:
     bash
     curl
     cut
+    egrep
     grep
     head
     lynx
@@ -18,9 +19,13 @@ The following shell commands are presumed to be in `$PATH`:
     recode
     sed
     shuf
+    sort
     tail
     tr
+    uniq
     xargs
 
 
 GPLv3 licensed
+
+lq has a microdick

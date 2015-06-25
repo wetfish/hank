@@ -2,12 +2,13 @@ import weechat
 import random
 import urllib
 import json
+import textblob
 
-weechat.register("hankbot", "ceph", "1.2", "GPL3", "hankbot", "", "")
+weechat.register("hankbot", "ceph", "1.6", "GPL3", "hankbot", "", "")
 
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, " \
     "like Gecko) Chrome/39.0.2171.95 Safari/537.36"
-UNPROVOKED_ODDS = 100
+UNPROVOKED_ODDS = 50
 PROVOKED_ODDS = 5
 INSULT_ODDS = 2
 
@@ -32,12 +33,19 @@ def msg_cb(data, signal, signal_data):
         run_im(srv, chn, rest, shuf=True)
     elif tokn == "?yt":
         run_yt(srv, chn, rest)
+    elif tokn == "?ys" or random.randint(1, UNPROVOKED_ODDS) == 1:
+        if tokn == "?ys":
+            ys_term = rest
+        else:
+            ys_phrases = textblob.TextBlob(line).noun_phrases
+            ys_term = ys_phrases[0] if len(ys_phrases) > 0 else "anal sex"
+        run_ys(srv, chn, ys_term)
     elif tokn == "?tw":
         run_tw(srv, chn, rest)
     elif tokn == "?tu":
         run_im(srv, chn, rest, pre_q="site:tumblr.com ")
-    elif tokn == "?rl" or random.randint(1, UNPROVOKED_ODDS) == 1:
-        run_wf(srv, chn)
+    elif tokn == "?rl": # or random.randint(1, UNPROVOKED_ODDS) == 1:
+        run_rl(srv, chn)
     elif tokn == "?ly":
         run_ly(srv, chn, rest)
     elif tokn == "?c":
@@ -91,6 +99,18 @@ def run_co(srv, chn, lang, code):
         "lang=%s&code=%s&private=True&run=True&submit=Submit" % \
         (urllib.quote(lang), urllib.quote(code)))
 
+def run_ys(srv, chn, q):
+    url = "https://www.youtube.com/results?" + \
+        urllib.urlencode({ "search_query": q })
+    run_curl(srv, chn, url, """grep -Po '(?<=watch\?v=).{11}' | sort | """ \
+        """uniq | shuf -n1 | """ \
+        """xargs -n1 -I@ """ \
+        """curl -s "https://www.youtube.com/all_comments?v=@" | """ \
+        """grep -Po '(?<=comment-text-content">).+?(?=</div>)' | """ \
+        """sed -e 's|<[^>]*>||g' | """ \
+        """egrep -iv '(\+|#|@|video|record|upload|stream|youtube)' | """ \
+        """shuf -n1 | recode -f html..ascii""", "%s")
+
 def run_insult(srv, chn):
     url = "http://www.insultgenerator.org"
     run_curl(srv, chn, url, """grep -Po '(?<=^<br><br>).*?(?=</div>$)' | """ \
@@ -134,14 +154,14 @@ def run_tw(srv, chn, q):
         """grep -Po '(?<=data-aria-label-part="0">).*?(?=</p>)' | """ \
         """sed -e 's/<[^>]*>//g' | recode -f html..ascii | head -n1""", "%s")
 
-def run_wf(srv, chn):
+def run_rl(srv, chn):
     logfile = '~/.weechat/logs/irc.%s.%s.weechatlog' % (srv, chn)
     cmd = '''tail -c "+$[ 1 + $[ RANDOM % $(stat -c '%s' ''' + \
         logfile + \
         ''') ]]" ''' + \
         logfile + \
         '''| head -n21 | tail -n20 2>/dev/null | ''' \
-        '''grep -Pv '(-->|<--)' | shuf -n1 | cut -f3-'''
+        '''grep -Pv '(-->|<--|You are now known as)' | shuf -n1 | cut -f3-'''
     weechat.hook_process(
         "bash -c %s" % (escapeshellarg(cmd)),
         5000,
@@ -185,7 +205,7 @@ def run_proc_cb(udata, command, rc, stdout, stderr):
             if curl_stdout != "":
                 weechat.command(buffer, "/say " + (fmt % (curl_stdout)))
             else:
-                weechat.command(buffer, ":/")
+                pass # weechat.command(buffer, ":/")
         else:
             weechat.command(buffer, ":(")
         curl_stdout = ""
