@@ -27,5 +27,3 @@ The following shell commands are presumed to be in `$PATH`:
 
 
 GPLv3 licensed
-
-lq has a microdick
