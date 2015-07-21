@@ -9,8 +9,8 @@ weechat.register("hankbot", "ceph", "2.0", "GPL3", "hankbot", "", "")
 
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, " \
     "like Gecko) Chrome/39.0.2171.95 Safari/537.36"
-UNPROVOKED_ODDS = 30
-ROSS_ODDS = 4
+UNPROVOKED_ODDS = 50
+ROSS_ODDS = 5
 PROVOKED_ODDS = 5
 INSULT_ODDS = 2
 
