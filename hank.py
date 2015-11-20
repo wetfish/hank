@@ -4,10 +4,12 @@ import urllib
 import json
 import time
 import textblob
+import sqlite3
+import os
 
-weechat.register("hankbot", "ceph", "2.1.1", "GPL3", "hankbot", "", "")
+weechat.register("hankbot", "ceph", "2.2.1", "GPL3", "hankbot", "", "")
 
-LOG_FILE = "/tmp/hank.log"
+SQLITE_DB = "~/hank.db"
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, " \
     "like Gecko) Chrome/39.0.2171.95 Safari/537.36"
 UNPROVOKED_ODDS = 50
@@ -26,6 +28,7 @@ def msg_cb(data, signal, signal_data):
     mynick = weechat.info_get("irc_nick", srv)
     chn = info["channel"]
     line = info["arguments"].split(":", 1)[1]
+    nick = info["nick"]
     pieces = line.split(" ", 1)
     is_ross = random.randint(1, ROSS_ODDS) == 1 and \
         (info["nick"] == "Rossthefox" or "ross" in line.lower())
@@ -86,8 +89,15 @@ def msg_cb(data, signal, signal_data):
         else:
             ys_phrases = textblob.TextBlob(line).noun_phrases
             ys_term = ys_phrases[0] if len(ys_phrases) > 0 else get_sexy_topic()
-            append_to_log("line=%s; term=%s" % (line, ys_term, ))
         run_ys(srv, chn, ys_term)
+    elif tokn == "?learn":
+        run_learn(srv, chn, nick, rest)
+    elif tokn == "?unlearn":
+        run_unlearn(srv, chn, rest)
+    elif tokn[:1] == '?':
+        val = get_learned(srv, chn, tokn[1:])
+        if val:
+            say(srv, chn, val)
     elif mynick.lower() in line.lower() and \
         random.randint(1, PROVOKED_ODDS) == 1:
         run_insult(srv, chn) if random.randint(1, INSULT_ODDS) == 1 \
@@ -110,8 +120,7 @@ def run_seen(srv, chn, rest):
     noun2 = NOUN_LIST[hash_2 % len(NOUN_LIST)]
     msg = "Last saw " + rest + " " + time_ago + " ago taking a shit on a " + \
         noun1 + " with a " + noun2
-    buffer = weechat.info_get("irc_buffer", srv + "," + chn)
-    weechat.command(buffer, "/say " + msg)
+    say(srv, chn, msg)
 
 def run_freep(srv, chn, rest):
     url = "http://www.freerepublic.com/tag/" + "*/index"
@@ -246,6 +255,61 @@ def run_curl(srv, chn, url, piping, fmt, data=False, curlopts="-s -L", \
         "run_proc_cb",
         json.dumps({'srv': srv, 'chn': chn, 'fmt': fmt}))
 
+def run_learn(srv, chn, author, rest):
+    now = int(time.time())
+    parts = rest.split(' ', 2)
+    rowc = 0
+    if len(parts) == 2 and \
+        len(parts[0].strip()) > 0 and \
+        len(parts[1].strip()) > 0:
+        rowc = db_write('insert into learn(key, val, author, created) ' \
+            'values(?,?,?,?)', parts[0].strip(), parts[1].strip(), author, now)
+    say(srv, chn, 'K' if rowc > 0 else ':|')
+
+def run_unlearn(srv, chn, rest):
+    now = int(time.time())
+    rowc = db_write('delete from learn where key = ?', rest)
+    say(srv, chn, ('Forgot %d thing(s).' % (rowc)) if rowc > 0 else ':|')
+
+def get_learned(srv, chn, tokn):
+    rows = db_query('select val from learn where key = ? ' \
+        'order by random() limit 1', tokn)
+    if len(rows) > 0:
+        return rows[0][0]
+    return None
+
+def say(srv, chn, msg):
+    buffer = weechat.info_get("irc_buffer", srv + "," + chn)
+    if buffer:
+        weechat.command(buffer, "/say " + msg)
+
+db = None
+def db_exec(sql, *args):
+    global db
+    if not db:
+        db = sqlite3.connect(os.path.expanduser(SQLITE_DB), isolation_level=None)
+    cursor = db.cursor()
+    cursor.execute(sql, args)
+    return cursor
+
+def db_query(sql, *args):
+    try:
+        cur = db_exec(sql, *args)
+        retval = cur.fetchall()
+        cur.close()
+    except:
+        return []
+    return retval
+
+def db_write(sql, *args):
+    try:
+        cur = db_exec(sql, *args)
+        retval = cur.rowcount
+        cur.close()
+    except:
+        return 0
+    return retval
+
 def escapeshellarg(arg):
     return "\\'".join("'" + p + "'" for p in arg.split("'"))
 
@@ -278,14 +342,6 @@ def get_sexy_topic():
         'youngster sex',
         'zebra sex'])
 
-def append_to_log(str):
-    str = "[%d] %s\n" % (int(time.time()), str.strip(), )
-    try:
-        with open(LOG_FILE, "a") as myfile:
-            myfile.write(str)
-    except IOError:
-        pass
-
 curl_stdout = ""
 curl_stderr = ""
 def run_proc_cb(udata, command, rc, stdout, stderr):
@@ -298,19 +354,13 @@ def run_proc_cb(udata, command, rc, stdout, stderr):
     if rci >= 0:
         weechat.prnt("", "hankbot: rc=%d command=%s stderr=%s stdout=%s" % \
             (rci, command, curl_stderr, curl_stdout))
-        buffer = weechat.info_get("irc_buffer", \
-            udata['srv'] + "," + udata['chn'])
-        if not buffer:
-            return weechat.WEECHAT_RC_OK
         if rci == 0:
             curl_stdout = curl_stdout.strip()
             curl_stdout = ''.join([i if ord(i) < 128 else '?' for i in curl_stdout])
             if curl_stdout != "":
-                weechat.command(buffer, "/say " + (fmt % (curl_stdout)))
-            else:
-                pass # weechat.command(buffer, ":/")
+                say(udata['srv'], udata['chn'], fmt % (curl_stdout))
         else:
-            weechat.command(buffer, ":(")
+            say(udata['srv'], udata['chn'], ':(')
         curl_stdout = ""
         curl_stderr = ""
     return weechat.WEECHAT_RC_OK
