@@ -6,6 +6,10 @@ import time
 import textblob
 import sqlite3
 import os
+import hmac
+import hashlib
+import base64
+import struct
 
 weechat.register("hankbot", "ceph", "2.2.1", "GPL3", "hankbot", "", "")
 
@@ -90,6 +94,8 @@ def msg_cb(data, signal, signal_data):
             ys_phrases = textblob.TextBlob(line).noun_phrases
             ys_term = ys_phrases[0] if len(ys_phrases) > 0 else get_sexy_topic()
         run_ys(srv, chn, ys_term)
+    elif tokn == "?op":
+        run_op(srv, chn, nick, rest)
     elif tokn == "?learn":
         run_learn(srv, chn, nick, rest)
     elif tokn == "?unlearn":
@@ -103,6 +109,28 @@ def msg_cb(data, signal, signal_data):
         run_insult(srv, chn) if random.randint(1, INSULT_ODDS) == 1 \
             else run_compliment(srv, chn)
     return weechat.WEECHAT_RC_OK
+
+def run_op(srv, chn, nick, rest):
+    try:
+        code_in = int(rest)
+    except:
+        return
+    key = "%s|%s|%s" % (srv,chn,nick,)
+    rows = db_query('select secret from auth where key = ?', key)
+    if len(rows) < 1:
+        return
+    secret = rows[0][0]
+    secret = base64.b32decode(secret.replace(' ', '').upper())
+    codes = []
+    leeway = 1
+    tslot = int(time.time()) / 30
+    for delta in range(-1 * leeway, leeway + 1):
+        h = hmac.new(secret, struct.pack(">Q", tslot + delta), hashlib.sha1).digest()
+        o = ord(h[19]) & 0xf
+        code = (struct.unpack(">I", h[o:o+4])[0] & 0x7fffffff) % 1000000
+        codes.append(code)
+    if code_in in codes:
+        say(srv, chn, nick, cmd="op")
 
 def run_seen(srv, chn, rest):
     global NOUN_LIST
@@ -278,10 +306,10 @@ def get_learned(srv, chn, tokn):
         return rows[0][0]
     return None
 
-def say(srv, chn, msg):
+def say(srv, chn, msg, cmd="say"):
     buffer = weechat.info_get("irc_buffer", srv + "," + chn)
     if buffer:
-        weechat.command(buffer, "/say " + msg)
+        weechat.command(buffer, "/" + cmd + " " + msg)
 
 db = None
 def db_exec(sql, *args):
