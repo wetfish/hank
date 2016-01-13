@@ -11,11 +11,11 @@ import hashlib
 import base64
 import struct
 
-weechat.register("hankbot", "ceph", "2.2.1", "GPL3", "hankbot", "", "")
+weechat.register("hankbot", "ceph", "2.3.0", "GPL3", "hankbot", "", "")
 
 SQLITE_DB = "~/hank.db"
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, " \
-    "like Gecko) Chrome/39.0.2171.95 Safari/537.36"
+    "like Gecko) Chrome/47.0.2526.106 Safari/537.36"
 UNPROVOKED_ODDS = 50
 ROSS_ODDS = 5
 PROVOKED_ODDS = 5
@@ -39,6 +39,8 @@ def msg_cb(data, signal, signal_data):
     tokn, rest = (pieces if len(pieces) == 2 else (line, ""))
     if tokn == "?im":
         run_im(srv, chn, rest)
+    elif tokn == "?gif":
+        run_gif(srv, chn, rest)
     elif tokn == "?ir":
         run_im(srv, chn, rest, shuf=True)
     elif tokn == "?yt":
@@ -49,6 +51,8 @@ def msg_cb(data, signal, signal_data):
         run_tw(srv, chn, rest, shuf=True)
     elif tokn == "?tu":
         run_im(srv, chn, rest, pre_q="site:tumblr.com ")
+    elif tokn == "?alert":
+        run_alert(srv, chn, nick);
     elif tokn == "?weather":
         run_weather(srv, chn, rest)
     elif tokn == "?rl":
@@ -96,14 +100,14 @@ def msg_cb(data, signal, signal_data):
         run_ys(srv, chn, ys_term)
     elif tokn == "?op":
         run_op(srv, chn, nick, rest)
-    elif tokn == "?learn":
-        run_learn(srv, chn, nick, rest)
-    elif tokn == "?unlearn":
-        run_unlearn(srv, chn, rest)
-    elif tokn[:1] == '?':
-        val = get_learned(srv, chn, tokn[1:])
-        if val:
-            say(srv, chn, val)
+    # elif tokn == "?learn":
+    #     run_learn(srv, chn, nick, rest)
+    # elif tokn == "?unlearn":
+    #     run_unlearn(srv, chn, rest)
+    # elif tokn[:1] == '?':
+    #     val = get_learned(srv, chn, tokn[1:])
+    #     if val:
+    #         say(srv, chn, val)
     elif mynick.lower() in line.lower() and \
         random.randint(1, PROVOKED_ODDS) == 1:
         run_insult(srv, chn) if random.randint(1, INSULT_ODDS) == 1 \
@@ -157,6 +161,25 @@ def run_freep(srv, chn, rest):
         """xargs -I@ curl -s 'http://www.freerepublic.com/@' | """ \
         """grep -A1 '<div class="b2">' | grep -Po '(?<=<p>).+(?=</p>)' | """ \
         """shuf -n1 | recode -f html..ascii""", "%s")
+
+def run_alert(srv, chn, from_nick):
+    buffer = weechat.info_get("irc_buffer", srv + "," + chn)
+    if not buffer:
+        return
+    nicks = []
+    nicklist = weechat.infolist_get("nicklist", buffer, "")
+    is_op = False
+    while weechat.infolist_next(nicklist):
+        nick = weechat.infolist_string(nicklist, "name")
+        nick_type = weechat.infolist_string(nicklist, "type")
+        nick_prefix = weechat.infolist_string(nicklist, "prefix")
+        if nick_type == "nick":
+            nicks.append(nick)
+            if nick == from_nick and nick_prefix == "@" or nick_prefix == "&":
+                is_op = True
+    weechat.infolist_free(nicklist)
+    if is_op:
+        say(srv, chn, "Alert: " + (", ".join(nicks)))
 
 def run_weather(srv, chn, rest):
     url = "http://www.wunderground.com/cgi-bin/findweather/getForecast?" + \
@@ -234,6 +257,19 @@ def run_im(srv, chn, q, pre_q="", shuf=False):
         """php -r "echo urldecode(urldecode(fgets(STDIN)));" | """ \
         """tr ' ' '+'""", "Found " + q + ": %s")
 
+def run_gif(srv, chn, q):
+    url = "https://www.google.com/search?" + \
+        urllib.urlencode({
+            "tbm": "isch",
+            "tbs": "itp:animated",
+            "q": q
+        })
+    shuf_or_head = "shuf"
+    run_curl(srv, chn, url, """grep -Po '(?<=imgurl=).+?(?=&amp;)' | """ + \
+        shuf_or_head + """ -n1 | """ \
+        """php -r "echo urldecode(urldecode(fgets(STDIN)));" | """ \
+        """tr ' ' '+'""", "Found " + q + ": %s")
+
 def run_yt(srv, chn, q):
     url = "https://www.youtube.com/results?" + \
         urllib.urlencode({
@@ -285,7 +321,7 @@ def run_curl(srv, chn, url, piping, fmt, data=False, curlopts="-s -L", \
 
 def run_learn(srv, chn, author, rest):
     now = int(time.time())
-    parts = rest.split(' ', 2)
+    parts = rest.split(' ', 1)
     rowc = 0
     if len(parts) == 2 and \
         len(parts[0].strip()) > 0 and \
@@ -314,6 +350,7 @@ def say(srv, chn, msg, cmd="say"):
 db = None
 def db_exec(sql, *args):
     global db
+    weechat.prnt("", "db_exec: sql=%s args=%s" % (sql, args, ))
     if not db:
         db = sqlite3.connect(os.path.expanduser(SQLITE_DB), isolation_level=None)
     cursor = db.cursor()
@@ -325,7 +362,8 @@ def db_query(sql, *args):
         cur = db_exec(sql, *args)
         retval = cur.fetchall()
         cur.close()
-    except:
+    except Exception as e:
+        weechat.prnt("", "db_query: %s" % (str(e),))
         return []
     return retval
 
@@ -334,7 +372,8 @@ def db_write(sql, *args):
         cur = db_exec(sql, *args)
         retval = cur.rowcount
         cur.close()
-    except:
+    except Exception as e:
+        weechat.prnt("", "db_write: %s" % (str(e),))
         return 0
     return retval
 
