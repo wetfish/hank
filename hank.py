@@ -11,8 +11,9 @@ import hashlib
 import base64
 import struct
 
-weechat.register("hankbot", "ceph", "2.3.0", "GPL3", "hankbot", "", "")
+weechat.register("hankbot", "ceph", "2.4.2", "GPL3", "hankbot", "", "")
 
+YOUTUBE_API_KEY = "AIzaSyAiYfOvXjvhwUFZ1VPn696guJcd2TJ-Lek"
 SQLITE_DB = "~/hank.db"
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, " \
     "like Gecko) Chrome/47.0.2526.106 Safari/537.36"
@@ -35,7 +36,7 @@ def msg_cb(data, signal, signal_data):
     nick = info["nick"]
     pieces = line.split(" ", 1)
     is_ross = random.randint(1, ROSS_ODDS) == 1 and \
-        (info["nick"] == "Rossthefox" or "ross" in line.lower())
+        (nick == "Rossthefox" or "ross" in line.lower())
     tokn, rest = (pieces if len(pieces) == 2 else (line, ""))
     if tokn == "?im":
         run_im(srv, chn, rest)
@@ -89,6 +90,8 @@ def msg_cb(data, signal, signal_data):
         run_co(srv, chn, "Scheme", rest)
     elif tokn == "?tcl":
         run_co(srv, chn, "Tcl", rest)
+    elif tokn == "?cb":
+        run_chaturbate(srv, chn, rest)
     elif tokn == "?ys" or random.randint(1, UNPROVOKED_ODDS) == 1 or is_ross:
         if tokn == "?ys":
             ys_term = rest
@@ -136,6 +139,14 @@ def run_op(srv, chn, nick, rest):
     if code_in in codes:
         say(srv, chn, nick, cmd="op")
 
+def run_chaturbate(srv, chn, rest):
+    rest = rest.strip()
+    if len(rest) > 0:
+        cmd = "chaturbate.php %s" % escapeshellarg(rest)
+    else:
+        cmd = "chaturbate.php"
+    run_cmd(cmd, srv, chn, "%s")
+
 def run_seen(srv, chn, rest):
     global NOUN_LIST
     url = "https://www.google.com/search?" + \
@@ -175,7 +186,7 @@ def run_alert(srv, chn, from_nick):
         nick_prefix = weechat.infolist_string(nicklist, "prefix")
         if nick_type == "nick":
             nicks.append(nick)
-            if nick == from_nick and nick_prefix == "@" or nick_prefix == "&":
+            if nick == from_nick and (nick_prefix == "@" or nick_prefix == "&"):
                 is_op = True
     weechat.infolist_free(nicklist)
     if is_op:
@@ -204,8 +215,7 @@ def run_ly(srv, chn, rest):
     run_curl(srv, chn, url, """grep -Po """
         """'(?<=href=")http://genius.com/[^"]+(?=" class=" song_link")' | """ \
         """head -n1 | xargs curl -s | lynx -stdin -dump | """ \
-        """ack -A1000 'Copy Embed' | tail -n+3 | """ \
-        """awk '/^\w/{s=1} {if (s==0) print $0}' | """ \
+        """tail -n+25 | """ \
         """sed -e 's/^\s\+//' | """ \
         """sed 's/\[[0-9]\+\]//' | """ \
         """ack -i -C1 """ + escapeshellarg(rest) + """ | head -n3""", "%s")
@@ -223,14 +233,15 @@ def run_ys(srv, chn, q):
     url = "https://www.youtube.com/results?" + \
         urllib.urlencode({ "search_query": q })
     run_curl(srv, chn, url, """grep -Po '(?<=watch\?v=).{11}' | sort | """ \
-        """uniq | shuf -n1 | """ \
-        """xargs -n1 -I@ """ \
-        """curl -s "https://www.youtube.com/all_comments?v=@" | """ \
-        """grep -Po '(?<=comment-text-content">).+?(?=</div>)' | """ \
-        """sed -e 's|<[^>]*>||g' | """ \
-        """egrep -iv '(\+|#|@|:|vid|record|upload|stream|youtube|""" \
-        """thank|post)' | awk 'length<=380' | """ \
-        """shuf -n1 | recode -f html..ascii""", "%s")
+        """uniq | shuf -n1 | xargs -n1 -I@ """ \
+        """curl -s 'https://content.googleapis.com/youtube/v3/""" \
+        """commentThreads?part=snippet&maxResults=100&videoId=@&textFormat=""" \
+        """plainText&key=""" + YOUTUBE_API_KEY + """' | """ \
+        """grep '"textDisplay"' | cut -d: -f2- | cut -c2- | sed 's/,$//' | """ \
+        """egrep -iv '(\+|#|@|:|vid|record|upload|stream|youtube|thank| """ \
+        """watch|download)' | """ \
+        """shuf -n1 | json_decode -p | paste -sd' ' | """ \
+        """recode -f html..ascii""", "%s")
 
 def run_insult(srv, chn):
     url = "http://www.insultgenerator.org"
@@ -252,7 +263,7 @@ def run_im(srv, chn, q, pre_q="", shuf=False):
             "q": pre_q + q
         })
     shuf_or_head = "shuf" if shuf else "head"
-    run_curl(srv, chn, url, """grep -Po '(?<=imgurl=).+?(?=&amp;)' | """ + \
+    run_curl(srv, chn, url, """grep -Po '(?<="ou":").+?(?=")' | """ + \
         shuf_or_head + """ -n1 | """ \
         """php -r "echo urldecode(urldecode(fgets(STDIN)));" | """ \
         """tr ' ' '+'""", "Found " + q + ": %s")
@@ -265,7 +276,7 @@ def run_gif(srv, chn, q):
             "q": q
         })
     shuf_or_head = "shuf"
-    run_curl(srv, chn, url, """grep -Po '(?<=imgurl=).+?(?=&amp;)' | """ + \
+    run_curl(srv, chn, url, """grep -Po '(?<="ou":").+?(?=")' | """ + \
         shuf_or_head + """ -n1 | """ \
         """php -r "echo urldecode(urldecode(fgets(STDIN)));" | """ \
         """tr ' ' '+'""", "Found " + q + ": %s")
@@ -313,6 +324,9 @@ def run_curl(srv, chn, url, piping, fmt, data=False, curlopts="-s -L", \
         escapeshellarg(url), \
         "2>&1" if with_err else "",
         piping)
+    run_cmd(cmd, srv, chn, fmt)
+
+def run_cmd(cmd, srv, chn, fmt):
     weechat.hook_process(
         "bash -c %s" % (escapeshellarg(cmd)),
         5000,

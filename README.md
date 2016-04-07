@@ -9,6 +9,7 @@ The following shell commands are presumed to be in `$PATH`:
     ack
     awk
     bash
+    chaturbate.php   lol
     curl
     cut
     egrep
@@ -24,6 +25,5 @@ The following shell commands are presumed to be in `$PATH`:
     tr
     uniq
     xargs
-
 
 GPLv3 licensed
