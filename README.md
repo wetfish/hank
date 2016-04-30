@@ -29,3 +29,7 @@ The following shell commands are presumed to be in `$PATH`:
 GPLv3 licensed
 
 Rachel has a spectacular butt.
+
+List of people who agree that Rachel has a spectacular butt:
+
+- Emilypi
