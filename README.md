@@ -27,3 +27,5 @@ The following shell commands are presumed to be in `$PATH`:
     xargs
 
 GPLv3 licensed
+
+Rachel has a spectacular butt.
