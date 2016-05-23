@@ -1,15 +1,16 @@
-import weechat
-import random
-import urllib
-import json
-import time
-import textblob
-import sqlite3
-import os
-import hmac
-import hashlib
 import base64
+import collections
+import hashlib
+import hmac
+import json
+import os
+import random
+import sqlite3
 import struct
+import textblob
+import time
+import urllib
+import weechat
 
 weechat.register("hankbot", "ceph", "2.4.3", "GPL3", "hankbot", "", "")
 
@@ -17,15 +18,20 @@ YOUTUBE_API_KEY = "AIzaSyAiYfOvXjvhwUFZ1VPn696guJcd2TJ-Lek"
 SQLITE_DB = "~/hank.db"
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, " \
     "like Gecko) Chrome/47.0.2526.106 Safari/537.36"
-UNPROVOKED_ODDS = 50
-UNPROVOKED_SHOUT_ODDS = 10
+UNPROVOKED_ODDS = 75
+UNPROVOKED_SHOUT_ODDS = 20
 ROSS_ODDS = 5
 PROVOKED_ODDS = 5
 INSULT_ODDS = 2
 SHOUT_LEN = 16
-SHOUT_MAX_TOKENS = 2
+SHOUT_MAX_TOKENS = 1
+MAX_CHAT_HISTORY = 10
 
 shout_tokens = 0
+chat_history = {}
+curl_stdout = ""
+curl_stderr = ""
+db = None
 
 def msg_cb(data, signal, signal_data):
     global shout_tokens
@@ -48,6 +54,8 @@ def msg_cb(data, signal, signal_data):
     tokn, rest = (pieces if len(pieces) == 2 else (line, ""))
     if tokn == "?im":
         run_im(srv, chn, rest)
+    elif tokn == "?comic":
+        run_comic(srv, chn, nick, rest)
     elif tokn == "?gif":
         run_gif(srv, chn, rest)
     elif tokn == "?ir":
@@ -307,13 +315,15 @@ def run_cmd(cmd, srv, chn, fmt):
 def say(srv, chn, msg, cmd="say"):
     global shout_tokens
     buffer = weechat.info_get("irc_buffer", srv + "," + chn)
-    if buffer:
-        if shout_tokens > 0 and not 'http' in msg:
-            shout_tokens -= 1
-            msg = msg.upper()
-        weechat.command(buffer, "/" + cmd + " " + msg)
+    if not buffer:
+        return
+    if shout_tokens > 0 and not 'http' in msg:
+        shout_tokens -= 1
+        msg = msg.upper()
+    if len(msg) > 350:
+        msg = msg[:350] + "... aight ENOUGH"
+    weechat.command(buffer, "/" + cmd + " " + msg)
 
-db = None
 def db_exec(sql, *args):
     global db
     weechat.prnt("", "db_exec: sql=%s args=%s" % (sql, args, ))
@@ -375,8 +385,6 @@ def get_sexy_topic():
         'youngster sex',
         'zebra sex'])
 
-curl_stdout = ""
-curl_stderr = ""
 def run_proc_cb(udata, command, rc, stdout, stderr):
     global curl_stdout, curl_stderr
     curl_stdout += stdout
