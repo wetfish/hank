@@ -12,7 +12,7 @@ import time
 import urllib
 import weechat
 
-weechat.register("hankbot", "ceph", "2.4.3", "GPL3", "hankbot", "", "")
+weechat.register("hankbot", "ceph", "2.4.4", "GPL3", "hankbot", "", "")
 
 YOUTUBE_API_KEY = "AIzaSyAiYfOvXjvhwUFZ1VPn696guJcd2TJ-Lek"
 SQLITE_DB = "~/hank.db"
@@ -20,11 +20,12 @@ USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, " \
     "like Gecko) Chrome/47.0.2526.106 Safari/537.36"
 UNPROVOKED_ODDS = 75
 UNPROVOKED_SHOUT_ODDS = 20
+UNPROVOKED_IMPOSSIBLE_ODDS = 9999
 ROSS_ODDS = 5
 PROVOKED_ODDS = 5
 INSULT_ODDS = 2
 SHOUT_LEN = 16
-SHOUT_MAX_TOKENS = 1
+SHOUT_MAX_TOKENS = 0
 MAX_CHAT_HISTORY = 10
 
 shout_tokens = 0
@@ -44,12 +45,15 @@ def msg_cb(data, signal, signal_data):
     nick = info["nick"]
     is_ross = random.randint(1, ROSS_ODDS) == 1 and \
         (nick == "Rossthefox" or "ross" in line.lower())
-    is_shouting = len(line) >= SHOUT_LEN and \
-        line == line.upper()
-    unprovoked_odds = UNPROVOKED_ODDS
+    is_alpha = line.upper() != line.lower()
+    is_shouting = is_alpha and line == line.upper() and len(line) >= SHOUT_LEN
     if is_shouting:
         unprovoked_odds = UNPROVOKED_SHOUT_ODDS
         shout_tokens = min(shout_tokens + 1, SHOUT_MAX_TOKENS)
+    elif is_alpha:
+        unprovoked_odds = UNPROVOKED_ODDS
+    else:
+        unprovoked_odds = UNPROVOKED_IMPOSSIBLE_ODDS
     pieces = line.split(" ", 1)
     tokn, rest = (pieces if len(pieces) == 2 else (line, ""))
     if tokn == "?im":
@@ -105,7 +109,7 @@ def msg_cb(data, signal, signal_data):
     elif tokn == "?cb":
         run_chaturbate(srv, chn, rest)
     elif tokn == "?ys" or \
-        random.randint(1, UNPROVOKED_ODDS) == 1 or \
+        random.randint(1, unprovoked_odds) == 1 or \
         is_ross or \
         is_shouting:
         if tokn == "?ys":
@@ -118,11 +122,26 @@ def msg_cb(data, signal, signal_data):
         run_ys(srv, chn, ys_term)
     elif tokn == "?op":
         run_op(srv, chn, nick, rest)
+    elif tokn == "?leave_us_at_once":
+        run_leave(srv, chn, nick, rest)
     elif mynick.lower() in line.lower() and \
         random.randint(1, PROVOKED_ODDS) == 1:
         run_insult(srv, chn) if random.randint(1, INSULT_ODDS) == 1 \
             else run_compliment(srv, chn)
     return weechat.WEECHAT_RC_OK
+
+def run_leave(srv, chn, nick, rest):
+    if nick != "ceph":
+        return
+    secs = 30
+    if rest != "":
+        try:
+            secs = int(rest)
+        except ValueError:
+            pass
+    msecs = max(1, min(600, secs)) * 1000
+    say(srv, chn, "", cmd="part")
+    say(srv, chn, "addreplace tmp timer " + str(msecs) + ";0;1 '' '' '/join -server " + srv + ' ' + chn, cmd="trigger")
 
 def run_op(srv, chn, nick, rest):
     try:
