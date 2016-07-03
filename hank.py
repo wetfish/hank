@@ -12,10 +12,19 @@ import time
 import urllib
 import weechat
 
-weechat.register("hankbot", "ceph", "2.4.4", "GPL3", "hankbot", "", "")
+weechat.register("hankbot", "ceph", "2.5.0", "GPL3", "hankbot", "", "")
 
+def get_hank_home():
+    infolist = weechat.infolist_get("python_script", "", "hankbot")
+    fname = "~/hank/hank.py"
+    while weechat.infolist_next(infolist):
+        fname = weechat.infolist_string(infolist, "filename")
+    weechat.infolist_free(infolist)
+    return os.path.dirname(os.path.realpath(fname))
+
+HANK_HOME = get_hank_home()
 YOUTUBE_API_KEY = "AIzaSyAiYfOvXjvhwUFZ1VPn696guJcd2TJ-Lek"
-SQLITE_DB = "~/hank.db"
+SQLITE_DB = HANK_HOME + "/hank.db"
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, " \
     "like Gecko) Chrome/47.0.2526.106 Safari/537.36"
 UNPROVOKED_ODDS = 75
@@ -58,8 +67,6 @@ def msg_cb(data, signal, signal_data):
     tokn, rest = (pieces if len(pieces) == 2 else (line, ""))
     if tokn == "?im":
         run_im(srv, chn, rest)
-    elif tokn == "?comic":
-        run_comic(srv, chn, nick, rest)
     elif tokn == "?gif":
         run_gif(srv, chn, rest)
     elif tokn == "?ir":
@@ -82,30 +89,8 @@ def msg_cb(data, signal, signal_data):
         run_freep(srv, chn, rest)
     elif tokn == "?pol":
         run_pol(srv, chn, rest)
-    elif tokn == "?c":
-        run_co(srv, chn, "C", rest)
-    elif tokn == "?cpp":
-        run_co(srv, chn, "C++", rest)
-    elif tokn == "?d":
-        run_co(srv, chn, "D", rest)
-    elif tokn == "?haskell":
-        run_co(srv, chn, "Haskell", rest)
-    elif tokn == "?lua":
-        run_co(srv, chn, "Lua", rest)
-    elif tokn == "?ocaml":
-        run_co(srv, chn, "OCaml", rest)
-    elif tokn == "?php":
-        run_co(srv, chn, "PHP", rest)
-    elif tokn == "?pl":
-        run_co(srv, chn, "Perl", rest)
-    elif tokn == "?py":
-        run_co(srv, chn, "Python", rest)
-    elif tokn == "?rb":
-        run_co(srv, chn, "Ruby", rest)
-    elif tokn == "?scheme":
-        run_co(srv, chn, "Scheme", rest)
-    elif tokn == "?tcl":
-        run_co(srv, chn, "Tcl", rest)
+    elif tokn == "?co":
+        run_co(srv, chn, rest)
     elif tokn == "?cb":
         run_chaturbate(srv, chn, rest)
     elif tokn == "?ys" or \
@@ -122,6 +107,14 @@ def msg_cb(data, signal, signal_data):
         run_ys(srv, chn, ys_term)
     elif tokn == "?op":
         run_op(srv, chn, nick, rest)
+    elif tokn == "?ti":
+        run_ti(srv, chn, rest)
+    elif tokn == "?nigga":
+        run_ti(srv, chn, "nigga")
+    elif tokn == "?nyc":
+        run_tgeo(srv, chn, "lat:[40.444269 TO 40.891423] AND lon:[-74.183121 TO -73.749847]")
+    elif tokn == "?denver":
+        run_tgeo(srv, chn, "lat:[39.709489 TO 39.763876] AND lon:[-105.032387 TO -104.949989]")
     elif tokn == "?leave_us_at_once":
         run_leave(srv, chn, nick, rest)
     elif mynick.lower() in line.lower() and \
@@ -132,6 +125,12 @@ def msg_cb(data, signal, signal_data):
 
 def run_leave(srv, chn, nick, rest):
     if nick != "ceph":
+        msg = """"You, there," I said, glowering, for I'd no notion of his """ \
+            """name. I pointed at the door. "Leave us at once. ... AT ONCE """ \
+            """NIGGA." The man glanced at the king first for confirmation, """ \
+            """unwise in my present humor, then finally, as I raised my """ \
+            """fist to strike him, he scurried from the room..."""
+        say(srv, chn, msg)
         return
     secs = 30
     if rest != "":
@@ -168,10 +167,11 @@ def run_op(srv, chn, nick, rest):
 def run_chaturbate(srv, chn, rest):
     rest = rest.strip()
     if len(rest) > 0:
-        cmd = "chaturbate.php %s" % escapeshellarg(rest)
+        cmd = "php %s/chaturbate.php %s" % (HANK_HOME, escapeshellarg(rest))
     else:
-        cmd = "chaturbate.php"
+        cmd = "php %s/chaturbate.php" % (HANK_HOME)
     run_cmd(cmd, srv, chn, "%s")
+
 
 def run_freep(srv, chn, rest):
     url = "http://www.freerepublic.com/tag/" + "*/index"
@@ -219,7 +219,9 @@ def run_ly(srv, chn, rest):
         """sed 's/\[[0-9]\+\]//' | """ \
         """ack -i -C1 """ + escapeshellarg(rest) + """ | head -n3""", "%s")
 
-def run_co(srv, chn, lang, code):
+def run_co(srv, chn, rest):
+    pieces = rest.split(" ", 1)
+    lang, code = (pieces if len(pieces) == 2 else ("", rest))
     url = "http://codepad.org"
     run_curl(srv, chn, url, """ack --no-color -A10 '^<pre>$' | """ \
         """lynx -stdin -dump | """ \
@@ -299,6 +301,28 @@ def run_tw(srv, chn, q, shuf=False):
         """grep -Po '(?<=data-aria-label-part="0">).*?(?=</p>)' | """ \
         """sed -e 's/<[^>]*>//g' | grep -Pv '^\s*$' | """ \
         """recode -f html..ascii | """ + shuf_or_head + """ -n1""", "%s")
+
+def run_ti(srv, chn, q):
+    url = "https://twitter.com/search?" + \
+        urllib.urlencode({
+            "f": "images",
+            "vertical": "default",
+            "q": q
+        })
+    run_curl(srv, chn, url, \
+        """grep -Po '(?<=data-resolved-url-large=").*?(?=")' | """ \
+        """recode -f html..ascii | shuf -n1""", "%s")
+
+def run_tgeo(srv, chn, q):
+    url = "http://onemilliontweetmap.com/omtm/search?" + \
+        urllib.urlencode({
+            "from": "0",
+            "q": q,
+            "size": "50"
+        })
+    run_curl(srv, chn, url, \
+        """grep -Po '(?<="text":").*?(?=")' | """ \
+        """recode -f html..ascii | shuf -n1""", "%s")
 
 def run_rl(srv, chn):
     logfile = '~/.weechat/logs/irc.%s.%s.weechatlog' % (srv, chn)

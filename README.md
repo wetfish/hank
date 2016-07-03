@@ -9,7 +9,6 @@ The following shell commands are presumed to be in `$PATH`:
     ack
     awk
     bash
-    chaturbate.php   lol
     curl
     cut
     egrep
@@ -26,10 +25,11 @@ The following shell commands are presumed to be in `$PATH`:
     uniq
     xargs
 
-GPLv3 licensed
+GPLv3 licensed. Omg who chose this shitty license.
 
-Rachel has a spectacular butt.
+Rachel has a spectacular butt, enhanced by galaxy leggings.
 
 List of people who agree that Rachel has a spectacular butt:
 
 - Emilypi
+- ceph
