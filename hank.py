@@ -67,6 +67,10 @@ def msg_cb(data, signal, signal_data):
     tokn, rest = (pieces if len(pieces) == 2 else (line, ""))
     if tokn == "?im":
         run_im(srv, chn, rest)
+    if tokn == "?g":
+        run_g(srv, chn, rest)
+    if tokn == "?gr":
+        run_g(srv, chn, rest, shuf=True)
     elif tokn == "?gif":
         run_gif(srv, chn, rest)
     elif tokn == "?ir":
@@ -265,6 +269,22 @@ def run_im(srv, chn, q, pre_q="", shuf=False):
         })
     shuf_or_head = "shuf" if shuf else "head"
     run_curl(srv, chn, url, """grep -Po '(?<="ou":").+?(?=")' | """ + \
+        shuf_or_head + """ -n1 | """ \
+        """php -r "echo urldecode(urldecode(fgets(STDIN)));" | """ \
+        """tr ' ' '+'""", "Found " + q + ": %s")
+
+def run_g(srv, chn, q, shuf=False):
+    url = "https://www.google.com/search?" + \
+        urllib.urlencode({
+            "site": "",
+            "source": "hp",
+            "q": q
+        })
+    shuf_or_head = "shuf" if shuf else "head"
+    run_curl(srv, chn, url, """lynx -stdin -dump | """ \
+        """grep -Po '\d+\.\s+https?://\S+' | """ \
+        """grep -Po 'https?://\S+' | """ \
+        """grep -Pv '(google|w3.org|schema.org)' | """ + \
         shuf_or_head + """ -n1 | """ \
         """php -r "echo urldecode(urldecode(fgets(STDIN)));" | """ \
         """tr ' ' '+'""", "Found " + q + ": %s")
