@@ -1,3 +1,5 @@
+# encoding=utf8
+import sys
 import base64
 import collections
 import hashlib
@@ -12,6 +14,9 @@ import time
 import urllib
 import weechat
 
+reload(sys)
+sys.setdefaultencoding('utf8')
+
 weechat.register("hankbot", "ceph", "2.5.0", "GPL3", "hankbot", "", "")
 
 def get_hank_home():
@@ -23,6 +28,8 @@ def get_hank_home():
     return os.path.dirname(os.path.realpath(fname))
 
 HANK_HOME = get_hank_home()
+IMGUR_CLIENT_ID = "fe0966af56cc0f0"
+IMGUR_CLIENT_SECRET = "cf14e4b09a9ae536ce21fc235e2f310fc97968f2"
 YOUTUBE_API_KEY = "AIzaSyAiYfOvXjvhwUFZ1VPn696guJcd2TJ-Lek"
 SQLITE_DB = HANK_HOME + "/hank.db"
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, " \
@@ -42,9 +49,10 @@ chat_history = {}
 curl_stdout = ""
 curl_stderr = ""
 db = None
+nigger_mode = False
 
 def msg_cb(data, signal, signal_data):
-    global shout_tokens
+    global shout_tokens, nigger_mode
     info = weechat.info_get_hashtable(
         "irc_message_parse", { "message": signal_data } )
     srv, _ = signal.split(",", 2)
@@ -54,6 +62,7 @@ def msg_cb(data, signal, signal_data):
     nick = info["nick"]
     is_ross = random.randint(1, ROSS_ODDS) == 1 and \
         (nick == "Rossthefox" or "ross" in line.lower())
+    is_childlock = False # nick in ["h", "hex", "hexafluoride"]
     is_alpha = line.upper() != line.lower()
     is_shouting = is_alpha and line == line.upper() and len(line) >= SHOUT_LEN
     if is_shouting:
@@ -65,11 +74,13 @@ def msg_cb(data, signal, signal_data):
         unprovoked_odds = UNPROVOKED_IMPOSSIBLE_ODDS
     pieces = line.split(" ", 1)
     tokn, rest = (pieces if len(pieces) == 2 else (line, ""))
-    if tokn == "?im":
+    if is_childlock:
+        return weechat.WEECHAT_RC_OK
+    elif tokn == "?im":
         run_im(srv, chn, rest)
-    if tokn == "?g":
+    elif tokn == "?g":
         run_g(srv, chn, rest)
-    if tokn == "?gr":
+    elif tokn == "?gr":
         run_g(srv, chn, rest, shuf=True)
     elif tokn == "?gif":
         run_gif(srv, chn, rest)
@@ -79,12 +90,16 @@ def msg_cb(data, signal, signal_data):
         run_yt(srv, chn, rest)
     elif tokn == "?tw":
         run_tw(srv, chn, rest)
+    elif tokn == "?twr":
+        run_twr(srv, chn, rest)
     elif tokn == "?tr":
         run_tw(srv, chn, rest, shuf=True)
     elif tokn == "?tu":
         run_im(srv, chn, rest, pre_q="site:tumblr.com ")
     elif tokn == "?alert":
         run_alert(srv, chn, nick);
+    elif tokn == "?write":
+        run_write(srv, chn, rest);
     elif tokn == "?rl":
         run_rl(srv, chn)
     elif tokn == "?ly":
@@ -95,6 +110,8 @@ def msg_cb(data, signal, signal_data):
         run_pol(srv, chn, rest)
     elif tokn == "?co":
         run_co(srv, chn, rest)
+    elif tokn == "?nigger":
+        nigger_mode = not nigger_mode
     elif tokn == "?cb":
         run_chaturbate(srv, chn, rest)
     elif tokn == "?ys" or \
@@ -109,10 +126,14 @@ def msg_cb(data, signal, signal_data):
             ys_phrases = textblob.TextBlob(line).noun_phrases
             ys_term = ys_phrases[0] if len(ys_phrases) > 0 else get_sexy_topic()
         run_ys(srv, chn, ys_term)
+    elif tokn == "?ud":
+        run_ud(srv, chn, rest)
     elif tokn == "?op":
         run_op(srv, chn, nick, rest)
     elif tokn == "?ti":
         run_ti(srv, chn, rest)
+    elif tokn == "?dong":
+        run_dong(srv, chn, rest)
     elif tokn == "?nigga":
         run_ti(srv, chn, "nigga")
     elif tokn == "?nyc":
@@ -126,6 +147,16 @@ def msg_cb(data, signal, signal_data):
         run_insult(srv, chn) if random.randint(1, INSULT_ODDS) == 1 \
             else run_compliment(srv, chn)
     return weechat.WEECHAT_RC_OK
+
+def run_dong(srv, chn, rest):
+    url = "http://dongerlist.com"
+    run_curl(srv, chn, url, """grep -Po """ \
+        """'(?<=<a class="last" href="http://dongerlist.com/page/)\d+' | """ \
+        """xargs -rn1 seq 1 | shuf -n1 | xargs -rn1 -I@ curl -s """ \
+        """'http://dongerlist.com/page/@' | """ \
+        """grep -Po '(?<=readonly="readonly">)[^<]+(?=<)' | """ \
+        """php -r 'while(($line=fgets(STDIN)) !== false) """ \
+        """echo html_entity_decode($line);' | shuf -n1""", "%s")
 
 def run_leave(srv, chn, nick, rest):
     if nick != "ceph":
@@ -204,6 +235,14 @@ def run_alert(srv, chn, from_nick):
     if is_op:
         say(srv, chn, "Alert: " + (", ".join(nicks)))
 
+def run_ud(srv, chn, rest):
+    url = "http://www.urbandictionary.com/define.php?" + \
+        urllib.urlencode({ "term": rest })
+    run_curl(srv, chn, url, """grep -Po """
+        """ "(?<=<meta content=).+(?= name='Description')" | """ \
+        """cut -c2- | rev | cut -c2- | rev | """ \
+        """head -n1 | recode -f html..ascii""", "%s")
+
 def run_pol(srv, chn, rest):
     url = "http://boards.4chan.org/pol/"
     run_curl(srv, chn, url, """grep -Po '(?<=thread/)\d+' | uniq | """ \
@@ -236,7 +275,7 @@ def run_co(srv, chn, rest):
 
 def run_ys(srv, chn, q):
     url = "https://www.youtube.com/results?" + \
-        urllib.urlencode({ "search_query": q })
+        urllib.urlencode({ "search_query": qq(q) })
     run_curl(srv, chn, url, """grep -Po '(?<=watch\?v=).{11}' | sort | """ \
         """uniq | shuf -n1 | xargs -n1 -I@ """ \
         """curl -s 'https://content.googleapis.com/youtube/v3/""" \
@@ -265,20 +304,20 @@ def run_im(srv, chn, q, pre_q="", shuf=False):
             "site": "",
             "tbm": "isch",
             "source": "hp",
-            "q": pre_q + q
+            "q": pre_q + qq(q)
         })
     shuf_or_head = "shuf" if shuf else "head"
-    run_curl(srv, chn, url, """grep -Po '(?<="ou":").+?(?=")' | """ + \
+    run_curl(srv, chn, url, """grep -Po '(?<="ou":)".+?"' | """ + \
         shuf_or_head + """ -n1 | """ \
-        """php -r "echo urldecode(urldecode(fgets(STDIN)));" | """ \
-        """tr ' ' '+'""", "Found " + q + ": %s")
+        """php -r 'echo @json_decode(file_get_contents("php://stdin"));'""",
+        "Found " + qq(q) + ": %s")
 
 def run_g(srv, chn, q, shuf=False):
     url = "https://www.google.com/search?" + \
         urllib.urlencode({
             "site": "",
             "source": "hp",
-            "q": q
+            "q": qq(q)
         })
     shuf_or_head = "shuf" if shuf else "head"
     run_curl(srv, chn, url, """lynx -stdin -dump | """ \
@@ -287,34 +326,49 @@ def run_g(srv, chn, q, shuf=False):
         """grep -Pv '(google|w3.org|schema.org)' | """ + \
         shuf_or_head + """ -n1 | """ \
         """php -r "echo urldecode(urldecode(fgets(STDIN)));" | """ \
-        """tr ' ' '+'""", "Found " + q + ": %s")
+        """tr ' ' '+'""", "Found " + qq(q) + ": %s")
 
 def run_gif(srv, chn, q):
     url = "https://www.google.com/search?" + \
         urllib.urlencode({
             "tbm": "isch",
             "tbs": "itp:animated",
-            "q": q
+            "q": qq(q)
         })
     shuf_or_head = "shuf"
     run_curl(srv, chn, url, """grep -Po '(?<="ou":").+?(?=")' | """ + \
         shuf_or_head + """ -n1 | """ \
         """php -r "echo urldecode(urldecode(fgets(STDIN)));" | """ \
-        """tr ' ' '+'""", "Found " + q + ": %s")
+        """tr ' ' '+'""", "Found " + qq(q) + ": %s")
+
+def run_write(srv, chn, q):
+    url = "http://www.cs.toronto.edu/~graves/handwriting.cgi?" + \
+        urllib.urlencode({
+            "text": q,
+            "style": "",
+            "bias": "0.15",
+            "samples": "1"
+        })
+    run_curl(srv, chn, url,
+        """grep -Po '(?<=data:image/jpeg;base64,)[^"]+' | base64 -d | """ \
+        """curl -s --compressed -XPOST -F 'image=@-' """ \
+        """-H 'Authorization: Client-ID """ + IMGUR_CLIENT_ID + """' """ \
+        """'https://api.imgur.com/3/image' | grep -Po '(?<="id":")[^"]+' | """ \
+        """xargs -rn1 printf 'http://i.imgur.com/%s.png'""", "%s :)")
 
 def run_yt(srv, chn, q):
     url = "https://www.youtube.com/results?" + \
         urllib.urlencode({
-            "search_query": q
+            "search_query": qq(q)
         })
     run_curl(srv, chn, url, """grep -Po '(?<=watch\?v=)[^"&<]+' | """ \
-        """head -n1""", "Found " + q + ": http://youtu.be/%s")
+        """head -n1""", "Found " + qq(q) + ": http://youtu.be/%s")
 
 def run_tw(srv, chn, q, shuf=False):
     url = "https://twitter.com/search?" + \
         urllib.urlencode({
             "f": "realtime",
-            "q": q
+            "q": qq(q)
         })
     shuf_or_head = "shuf" if shuf else "head"
     run_curl(srv, chn, url, \
@@ -322,12 +376,33 @@ def run_tw(srv, chn, q, shuf=False):
         """sed -e 's/<[^>]*>//g' | grep -Pv '^\s*$' | """ \
         """recode -f html..ascii | """ + shuf_or_head + """ -n1""", "%s")
 
+def run_twr(srv, chn, q, shuf=False):
+    url = "https://twitter.com/search?" + \
+        urllib.urlencode({
+            "f": "realtime",
+            "q": qq(q)
+        })
+    shuf_or_head = "shuf" if shuf else "head"
+    run_curl(srv, chn, url, \
+        """grep -Po '(?<=data-aria-label-part="0">).*?(?=</p>)' | """ \
+        """sed -e 's/<[^>]*>//g' | grep -Pv '^\s*$' | """ \
+        """recode -f html..ascii | """ + shuf_or_head + """ -n1 | """ \
+        """php -r "echo urlencode(fgets(STDIN));" | """ \
+        """xargs -rn1 printf 'http://www.cs.toronto.edu/~graves/""" \
+        """handwriting.cgi?style=&bias=0.15&samples=1&text=%s' | """ \
+        """xargs -rn1 curl -s | """ \
+        """grep -Po '(?<=data:image/jpeg;base64,)[^"]+' | base64 -d | """ \
+        """curl -s --compressed -XPOST -F 'image=@-' """ \
+        """-H 'Authorization: Client-ID """ + IMGUR_CLIENT_ID + """' """ \
+        """'https://api.imgur.com/3/image' | grep -Po '(?<="id":")[^"]+' | """ \
+        """xargs -rn1 printf 'http://i.imgur.com/%s.png'""", "%s :0")
+
 def run_ti(srv, chn, q):
     url = "https://twitter.com/search?" + \
         urllib.urlencode({
             "f": "images",
             "vertical": "default",
-            "q": q
+            "q": qq(q)
         })
     run_curl(srv, chn, url, \
         """grep -Po '(?<=data-resolved-url-large=").*?(?=")' | """ \
@@ -337,7 +412,7 @@ def run_tgeo(srv, chn, q):
     url = "http://onemilliontweetmap.com/omtm/search?" + \
         urllib.urlencode({
             "from": "0",
-            "q": q,
+            "q": qq(q),
             "size": "50"
         })
     run_curl(srv, chn, url, \
@@ -374,6 +449,12 @@ def run_cmd(cmd, srv, chn, fmt):
         5000,
         "run_proc_cb",
         json.dumps({'srv': srv, 'chn': chn, 'fmt': fmt}))
+
+def qq(s):
+    global nigger_mode
+    if not nigger_mode:
+        return s
+    return s + " nigger"
 
 def say(srv, chn, msg, cmd="say"):
     global shout_tokens
@@ -459,8 +540,8 @@ def run_proc_cb(udata, command, rc, stdout, stderr):
         weechat.prnt("", "hankbot: rc=%d command=%s stderr=%s stdout=%s" % \
             (rci, command, curl_stderr, curl_stdout))
         if rci == 0:
-            curl_stdout = curl_stdout.strip()
-            curl_stdout = ''.join([i if ord(i) < 128 else '?' for i in curl_stdout])
+            # curl_stdout = curl_stdout.strip()
+            # curl_stdout = ''.join([i if ord(i) < 128 else '?' for i in curl_stdout])
             if curl_stdout != "":
                 say(udata['srv'], udata['chn'], fmt % (curl_stdout))
         else:
