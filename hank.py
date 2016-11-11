@@ -49,10 +49,9 @@ chat_history = {}
 curl_stdout = ""
 curl_stderr = ""
 db = None
-nigger_mode = False
 
 def msg_cb(data, signal, signal_data):
-    global shout_tokens, nigger_mode
+    global shout_tokens
     info = weechat.info_get_hashtable(
         "irc_message_parse", { "message": signal_data } )
     srv, _ = signal.split(",", 2)
@@ -110,8 +109,6 @@ def msg_cb(data, signal, signal_data):
         run_pol(srv, chn, rest)
     elif tokn == "?co":
         run_co(srv, chn, rest)
-    elif tokn == "?nigger":
-        nigger_mode = not nigger_mode
     elif tokn == "?cb":
         run_chaturbate(srv, chn, rest)
     elif tokn == "?ys" or \
@@ -451,10 +448,7 @@ def run_cmd(cmd, srv, chn, fmt):
         json.dumps({'srv': srv, 'chn': chn, 'fmt': fmt}))
 
 def qq(s):
-    global nigger_mode
-    if not nigger_mode:
-        return s
-    return s + " nigger"
+    return s
 
 def say(srv, chn, msg, cmd="say"):
     global shout_tokens
