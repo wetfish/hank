@@ -18,7 +18,7 @@ import weechat
 reload(sys)
 sys.setdefaultencoding('utf8')
 
-weechat.register("hankbot", "ceph", "2.7.0", "GPL3", "hankbot", "", "")
+weechat.register("hankbot", "ceph", "2.7.1", "GPL3", "hankbot", "", "")
 
 def get_hank_home():
     infolist = weechat.infolist_get("python_script", "", "hankbot")
@@ -49,6 +49,7 @@ shout_tokens = 0
 curl_stdout = ""
 curl_stderr = ""
 db = None
+polls = []
 
 def msg_cb(data, signal, signal_data):
     global shout_tokens
@@ -75,6 +76,7 @@ def msg_cb(data, signal, signal_data):
     tokn, rest = (pieces if len(pieces) == 2 else (line, ""))
     update_seen(srv, chn, nick)
     do_tell(srv, chn, nick)
+    do_poll(srv, chn, nick, line)
     url = extract_url(line)
     if is_childlock:
         return weechat.WEECHAT_RC_OK
@@ -148,11 +150,58 @@ def msg_cb(data, signal, signal_data):
         run_seen(srv, chn, nick, rest)
     elif tokn == "?tell":
         run_tell(srv, chn, nick, rest)
+    elif tokn == "?poll":
+        run_poll(srv, chn, nick, rest)
     elif mynick.lower() in line.lower() and \
         random.randint(1, PROVOKED_ODDS) == 1:
         run_insult(srv, chn) if random.randint(1, INSULT_ODDS) == 1 \
             else run_compliment(srv, chn)
     return weechat.WEECHAT_RC_OK
+
+def run_poll(srv, chn, nick, rest):
+    global polls
+    m = re.search('(.+)\s+<([^>]+)>\s+(\d+)', rest)
+    if not m:
+        say(srv, chn, "E.g.: ?poll question <answer1,answer2,etc> 600")
+        return
+    question = m.group(1)
+    answers = m.group(2).split(",")
+    expire = time.time() + int(m.group(3))
+    polls.append({
+        'srv': srv,
+        'chn': chn,
+        'q': question,
+        'as': answers,
+        'r': {},
+        'exp': expire,
+        'dead': False
+    })
+    say(srv, chn, "Tracking...")
+
+def do_poll(srv, chn, nick, line):
+    global polls
+    now = time.time()
+    for poll in polls:
+        if poll['srv'] == srv and poll['chn'] == chn:
+            if now >= poll['exp']:
+                summarize_poll(srv, chn, poll)
+                poll['dead'] = True
+            elif line in poll['as']:
+                poll['r'][nick] = line
+    polls = [ poll for poll in polls if not poll['dead'] ]
+
+def summarize_poll(srv, chn, poll):
+    rs = { a: 0 for a in poll['as'] }
+    for nick in poll['r']:
+        if not poll['r'][nick] in rs:
+            rs[poll['r'][nick]] = 0
+        rs[poll['r'][nick]] += 1
+    rrs = []
+    for a in rs:
+        ct = rs[a]
+        rrs.append("%s: %d" % (a, ct))
+    rrrs = ', '.join(rrs)
+    say(srv, chn, "Poll results: %s ... %s" % (poll['q'], rrrs))
 
 def extract_url(rest):
     m = re.search('https?://\S+', rest)
