@@ -1,7 +1,6 @@
 # encoding=utf8
-import sys
 import base64
-import collections
+import datetime
 import hashlib
 import hmac
 import json
@@ -9,6 +8,7 @@ import os
 import random
 import sqlite3
 import struct
+import sys
 import textblob
 import time
 import urllib
@@ -17,7 +17,7 @@ import weechat
 reload(sys)
 sys.setdefaultencoding('utf8')
 
-weechat.register("hankbot", "ceph", "2.5.0", "GPL3", "hankbot", "", "")
+weechat.register("hankbot", "ceph", "2.6.2", "GPL3", "hankbot", "", "")
 
 def get_hank_home():
     infolist = weechat.infolist_get("python_script", "", "hankbot")
@@ -44,8 +44,12 @@ SHOUT_LEN = 16
 SHOUT_MAX_TOKENS = 0
 MAX_CHAT_HISTORY = 10
 
+# TODO
+# ?tell
+# ?wa
+# URLs
+
 shout_tokens = 0
-chat_history = {}
 curl_stdout = ""
 curl_stderr = ""
 db = None
@@ -73,6 +77,7 @@ def msg_cb(data, signal, signal_data):
         unprovoked_odds = UNPROVOKED_IMPOSSIBLE_ODDS
     pieces = line.split(" ", 1)
     tokn, rest = (pieces if len(pieces) == 2 else (line, ""))
+    update_seen(srv, chn, nick)
     if is_childlock:
         return weechat.WEECHAT_RC_OK
     elif tokn == "?im":
@@ -139,11 +144,27 @@ def msg_cb(data, signal, signal_data):
         run_tgeo(srv, chn, "lat:[39.709489 TO 39.763876] AND lon:[-105.032387 TO -104.949989]")
     elif tokn == "?leave_us_at_once":
         run_leave(srv, chn, nick, rest)
+    elif tokn == "?seen":
+        run_seen(srv, chn, nick, rest)
     elif mynick.lower() in line.lower() and \
         random.randint(1, PROVOKED_ODDS) == 1:
         run_insult(srv, chn) if random.randint(1, INSULT_ODDS) == 1 \
             else run_compliment(srv, chn)
     return weechat.WEECHAT_RC_OK
+
+def run_seen(srv, chn, nick, who):
+    rows = db_query('select ts from seen where srv = ? and chn = ? and nick = ?', srv, chn, who)
+    if len(rows) < 1:
+        if random.randint(1, 3) == 1:
+            who = "John Galt"
+        say(srv, chn, "Who is %s?" % (who))
+    else:
+        ts = datetime.datetime.fromtimestamp(int(rows[0][0])).ctime()
+        say(srv, chn, "Last saw %s here on %s" % (who, ts))
+
+def update_seen(srv, chn, nick):
+    ts = int(time.time())
+    db_write("insert or replace into seen (srv, chn, nick, ts) values(?, ?, ?, ?)", srv, chn, nick, ts)
 
 def run_dong(srv, chn, rest):
     url = "http://dongerlist.com"
@@ -156,7 +177,7 @@ def run_dong(srv, chn, rest):
         """echo html_entity_decode($line);' | shuf -n1""", "%s")
 
 def run_leave(srv, chn, nick, rest):
-    if nick != "ceph":
+    if nick != "ceph" and nick != "Holofernes":
         msg = """"You, there," I said, glowering, for I'd no notion of his """ \
             """name. I pointed at the door. "Leave us at once. ... AT ONCE """ \
             """NIGGA." The man glanced at the king first for confirmation, """ \
