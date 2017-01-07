@@ -45,7 +45,6 @@ SHOUT_MAX_TOKENS = 0
 MAX_CHAT_HISTORY = 10
 
 # TODO
-# ?tell
 # ?wa
 # URLs
 
@@ -78,6 +77,7 @@ def msg_cb(data, signal, signal_data):
     pieces = line.split(" ", 1)
     tokn, rest = (pieces if len(pieces) == 2 else (line, ""))
     update_seen(srv, chn, nick)
+    do_tell(srv, chn, nick)
     if is_childlock:
         return weechat.WEECHAT_RC_OK
     elif tokn == "?im":
@@ -146,11 +146,29 @@ def msg_cb(data, signal, signal_data):
         run_leave(srv, chn, nick, rest)
     elif tokn == "?seen":
         run_seen(srv, chn, nick, rest)
+    elif tokn == "?tell":
+        run_tell(srv, chn, nick, rest)
     elif mynick.lower() in line.lower() and \
         random.randint(1, PROVOKED_ODDS) == 1:
         run_insult(srv, chn) if random.randint(1, INSULT_ODDS) == 1 \
             else run_compliment(srv, chn)
     return weechat.WEECHAT_RC_OK
+
+def run_tell(srv, chn, nick, rest):
+    pieces = rest.split(" ", 1)
+    if len(pieces) != 2:
+        return
+    to, msg = pieces
+    db_write('insert into tell (srv, chn, nick, frm, msg) values (?, ?, ?, ?, ?)', srv, chn, to, nick, msg)
+    say(srv, chn, "K")
+
+def do_tell(srv, chn, nick):
+    rows = db_query('select frm, msg from tell where srv = ? and chn = ? and nick = ?', srv, chn, nick)
+    if len(rows) < 1:
+        return
+    for i in range(len(rows)):
+        say(srv, chn, "%s, %s said: %s" % (nick, rows[i][0], rows[i][1]))
+    db_write('delete from tell where srv = ? and chn = ? and nick = ?', srv, chn, nick)
 
 def run_seen(srv, chn, nick, who):
     rows = db_query('select ts from seen where srv = ? and chn = ? and nick = ?', srv, chn, who)
