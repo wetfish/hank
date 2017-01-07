@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 import random
+import re
 import sqlite3
 import struct
 import sys
@@ -17,7 +18,7 @@ import weechat
 reload(sys)
 sys.setdefaultencoding('utf8')
 
-weechat.register("hankbot", "ceph", "2.6.2", "GPL3", "hankbot", "", "")
+weechat.register("hankbot", "ceph", "2.7.0", "GPL3", "hankbot", "", "")
 
 def get_hank_home():
     infolist = weechat.infolist_get("python_script", "", "hankbot")
@@ -43,10 +44,6 @@ INSULT_ODDS = 2
 SHOUT_LEN = 16
 SHOUT_MAX_TOKENS = 0
 MAX_CHAT_HISTORY = 10
-
-# TODO
-# ?wa
-# URLs
 
 shout_tokens = 0
 curl_stdout = ""
@@ -78,8 +75,11 @@ def msg_cb(data, signal, signal_data):
     tokn, rest = (pieces if len(pieces) == 2 else (line, ""))
     update_seen(srv, chn, nick)
     do_tell(srv, chn, nick)
+    url = extract_url(line)
     if is_childlock:
         return weechat.WEECHAT_RC_OK
+    elif url:
+        run_url(srv, chn, url)
     elif tokn == "?im":
         run_im(srv, chn, rest)
     elif tokn == "?g":
@@ -153,6 +153,16 @@ def msg_cb(data, signal, signal_data):
         run_insult(srv, chn) if random.randint(1, INSULT_ODDS) == 1 \
             else run_compliment(srv, chn)
     return weechat.WEECHAT_RC_OK
+
+def extract_url(rest):
+    m = re.search('https?://\S+', rest)
+    if m:
+        return m.group(0)
+    return None
+
+def run_url(srv, chn, url):
+    run_curl(srv, chn, url, """grep -Po '(?<=<title>).+(?=</title>)' | """ \
+        """recode -f html..ascii""", "^ %s")
 
 def run_tell(srv, chn, nick, rest):
     pieces = rest.split(" ", 1)
