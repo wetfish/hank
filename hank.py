@@ -235,10 +235,10 @@ def run_alert(srv, chn, from_nick):
 def run_ud(srv, chn, rest):
     url = "http://www.urbandictionary.com/define.php?" + \
         urllib.urlencode({ "term": rest })
-    run_curl(srv, chn, url, """grep -Po """
-        """ "(?<=<meta content=).+(?= name='Description')" | """ \
-        """cut -c2- | rev | cut -c2- | rev | """ \
-        """head -n1 | recode -f html..ascii""", "%s")
+    run_curl(srv, chn, url, """dos2unix | """ \
+        """awk -von=0 '/<\/div>/{if(on==1)exit} """ \
+        """on==1{print $0} /<div class=.meaning.>/{on=1}' | """ \
+        """lynx -stdin -dump | sed -e 's/^\s\+//' | paste -sd' '""", "%s")
 
 def run_pol(srv, chn, rest):
     url = "http://boards.4chan.org/pol/"
@@ -305,6 +305,7 @@ def run_im(srv, chn, q, pre_q="", shuf=False):
         })
     shuf_or_head = "shuf" if shuf else "head"
     run_curl(srv, chn, url, """grep -Po '(?<="ou":)".+?"' | """ + \
+        """grep -v photobucket | """ + \
         shuf_or_head + """ -n1 | """ \
         """php -r 'echo @json_decode(file_get_contents("php://stdin"));'""",
         "Found " + qq(q) + ": %s")
@@ -458,13 +459,13 @@ def say(srv, chn, msg, cmd="say"):
     if shout_tokens > 0 and not 'http' in msg:
         shout_tokens -= 1
         msg = msg.upper()
-    if len(msg) > 350:
-        msg = msg[:350] + "... aight ENOUGH"
+    if len(msg) > 512:
+        msg = msg[:512] + "... aight ENOUGH"
     weechat.command(buffer, "/" + cmd + " " + msg)
 
 def db_exec(sql, *args):
     global db
-    weechat.prnt("", "db_exec: sql=%s args=%s" % (sql, args, ))
+    # weechat.prnt("", "db_exec: sql=%s args=%s" % (sql, args, ))
     if not db:
         db = sqlite3.connect(os.path.expanduser(SQLITE_DB), isolation_level=None)
     cursor = db.cursor()

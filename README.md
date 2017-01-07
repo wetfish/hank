@@ -11,6 +11,7 @@ The following shell commands are presumed to be in `$PATH`:
     bash
     curl
     cut
+    dos2unix
     egrep
     grep
     head
