@@ -118,6 +118,8 @@ def msg_cb(data, signal, signal_data):
         run_co(srv, chn, rest)
     elif tokn == "?cb":
         run_chaturbate(srv, chn, rest)
+    elif tokn == "?meme":
+        run_memegen(srv, chn, rest)
     elif tokn == "?ys" or \
         random.randint(1, unprovoked_odds) == 1 or \
         is_ross or \
@@ -165,8 +167,9 @@ def run_poll(srv, chn, nick, rest):
         say(srv, chn, "E.g.: ?poll question <answer1,answer2,etc> 600")
         return
     question = m.group(1)
-    answers = m.group(2).split(",")
-    expire = time.time() + int(m.group(3))
+    answers = list(set([ x.strip() for x in m.group(2).split(",") ]))
+    ttl = max(min(int(m.group(3)), 3600), 10)
+    expire = time.time() + ttl
     polls.append({
         'srv': srv,
         'chn': chn,
@@ -176,18 +179,18 @@ def run_poll(srv, chn, nick, rest):
         'exp': expire,
         'dead': False
     })
-    say(srv, chn, "Tracking...")
+    say(srv, chn, "Tracking for %d secs..." % ttl)
 
 def do_poll(srv, chn, nick, line):
     global polls
     now = time.time()
     for poll in polls:
         if poll['srv'] == srv and poll['chn'] == chn:
+            if line in poll['as']:
+                poll['r'][nick] = line
             if now >= poll['exp']:
                 summarize_poll(srv, chn, poll)
                 poll['dead'] = True
-            elif line in poll['as']:
-                poll['r'][nick] = line
     polls = [ poll for poll in polls if not poll['dead'] ]
 
 def summarize_poll(srv, chn, poll):
@@ -230,6 +233,7 @@ def do_tell(srv, chn, nick):
     db_write('delete from tell where srv = ? and chn = ? and nick = ?', srv, chn, nick)
 
 def run_seen(srv, chn, nick, who):
+    who = who.strip()
     rows = db_query('select ts from seen where srv = ? and chn = ? and nick = ?', srv, chn, who)
     if len(rows) < 1:
         if random.randint(1, 3) == 1:
@@ -294,6 +298,11 @@ def run_op(srv, chn, nick, rest):
     if code_in in codes:
         say(srv, chn, nick, cmd="op")
 
+def run_memegen(srv, chn, rest):
+    args = [ escapeshellarg(x.strip()) for x in rest.split("|", 2) ]
+    cmd = ("casperjs " + HANK_HOME + "/memegen.js " + " ".join(['%s'] * len(args)) + " | tr -d '\n'") % tuple(args)
+    run_cmd(cmd, srv, chn, "%s.jpg", timeout=30000)
+
 def run_chaturbate(srv, chn, rest):
     rest = rest.strip()
     if len(rest) > 0:
@@ -301,7 +310,6 @@ def run_chaturbate(srv, chn, rest):
     else:
         cmd = "php %s/chaturbate.php" % (HANK_HOME)
     run_cmd(cmd, srv, chn, "%s")
-
 
 def run_freep(srv, chn, rest):
     url = "http://www.freerepublic.com/tag/" + "*/index"
@@ -539,10 +547,10 @@ def run_curl(srv, chn, url, piping, fmt, data=False, curlopts="-s -L", \
         piping)
     run_cmd(cmd, srv, chn, fmt)
 
-def run_cmd(cmd, srv, chn, fmt):
+def run_cmd(cmd, srv, chn, fmt, timeout=5000):
     weechat.hook_process(
         "bash -c %s" % (escapeshellarg(cmd)),
-        5000,
+        timeout,
         "run_proc_cb",
         json.dumps({'srv': srv, 'chn': chn, 'fmt': fmt}))
 

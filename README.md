@@ -9,6 +9,7 @@ The following shell commands are presumed to be in `$PATH`:
     ack
     awk
     bash
+    casperjs
     curl
     cut
     dos2unix
