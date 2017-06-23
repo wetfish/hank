@@ -1,6 +1,8 @@
 Hank
 ====
 
+[![Join the chat at https://gitter.im/wetfish/hank](https://badges.gitter.im/wetfish/hank.svg)](https://gitter.im/wetfish/hank?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 A shitty IRC bot (weechat plugin) that abuses `curl` and other shell commands,
 and websites in general.
 
